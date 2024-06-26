@@ -8,10 +8,12 @@ import android.content.pm.PackageManager
 import android.net.VpnService
 import android.os.Build
 import android.system.OsConstants
+import android.util.Log
 import libtailscale.Libtailscale
 import java.util.UUID
 
 open class IPNService : VpnService(), libtailscale.IPNService {
+  private val TAG = "IPNService"
   private val randomID: String = UUID.randomUUID().toString()
 
   override fun id(): String {
@@ -76,9 +78,13 @@ open class IPNService : VpnService(), libtailscale.IPNService {
   }
 
   private fun showForegroundNotification() {
-    startForeground(
-        UninitializedApp.STATUS_NOTIFICATION_ID,
-        UninitializedApp.get().buildStatusNotification(true))
+    try {
+      startForeground(
+          UninitializedApp.STATUS_NOTIFICATION_ID,
+          UninitializedApp.get().buildStatusNotification(true))
+    } catch (e: Exception) {
+      Log.e(TAG, "Failed to start foreground service: $e")
+    }
   }
 
   private fun configIntent(): PendingIntent {
@@ -92,7 +98,9 @@ open class IPNService : VpnService(), libtailscale.IPNService {
   private fun disallowApp(b: Builder, name: String) {
     try {
       b.addDisallowedApplication(name)
-    } catch (e: PackageManager.NameNotFoundException) {}
+    } catch (e: PackageManager.NameNotFoundException) {
+      Log.d(TAG, "Failed to add disallowed application: $e")
+    }
   }
 
   override fun newBuilder(): VPNServiceBuilder {
@@ -124,6 +132,13 @@ open class IPNService : VpnService(), libtailscale.IPNService {
 
     // Google Chromecast https://github.com/tailscale/tailscale/issues/3636
     disallowApp(b, "com.google.android.apps.chromecast.app")
+
+    // Any app that the user manually disallowed in the GUI
+    for (disallowedPackageName in UninitializedApp.get().disallowedPackageNames()) {
+      Log.d(TAG, "Disallowing user-set app: $disallowedPackageName")
+      disallowApp(b, disallowedPackageName)
+    }
+
     return VPNServiceBuilder(b)
   }
 
